@@ -1,11 +1,10 @@
-from types import SimpleNamespace
-
+import uuid
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.crud.address import AddressService
-from dependencies.security import require_all_permissions, get_current_user
+from dependencies.security import require_all_permissions, get_current_user, JWTUser
 from config import Permissions
 from tests.factories.token_session_user_factories import UserFactory
 
@@ -30,13 +29,19 @@ def address_urls(get_app):
 
 @pytest.fixture(autouse=True)
 def override_permissions_and_user(get_app):
-    current_user = SimpleNamespace(id="test-user-uuid")
+    current_user = JWTUser(
+        id=str(uuid.uuid4()),
+        first_name="Test",
+        last_name="User",
+        token_jti="test-jti",
+        email="test@example.com",
+    )
 
     async def _override_get_current_user():
         return current_user
 
-    def _override_require_all_permissions(*_, **__):
-        return lambda: current_user
+    async def _override_require_all_permissions():
+        return current_user
 
     get_app.dependency_overrides[require_all_permissions] = _override_require_all_permissions
     get_app.dependency_overrides[require_all_permissions(Permissions.USERS_WRITE_OWN)] = _override_require_all_permissions
@@ -49,8 +54,14 @@ def override_permissions_and_user(get_app):
 
 @pytest.mark.asyncio
 class TestAddressEndpoints:
-    async def test_upsert_creates_when_missing(self, client: AsyncClient, db: AsyncSession, address_urls):
-        user = UserFactory.build(uuid_key="test-user-uuid")
+    async def test_upsert_creates_when_missing(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        address_urls,
+        override_permissions_and_user: JWTUser,
+    ):
+        user = UserFactory.build(uuid_key=override_permissions_and_user.id)
         db.add(user)
         await db.commit()
         await db.refresh(user)
@@ -74,8 +85,14 @@ class TestAddressEndpoints:
         assert stored is not None
         assert stored.country == payload["country"]
 
-    async def test_get_me_creates_if_missing(self, client: AsyncClient, db: AsyncSession, address_urls):
-        user = UserFactory.build(uuid_key="test-user-uuid")
+    async def test_get_me_creates_if_missing(
+        self,
+        client: AsyncClient,
+        db: AsyncSession,
+        address_urls,
+        override_permissions_and_user: JWTUser,
+    ):
+        user = UserFactory.build(uuid_key=override_permissions_and_user.id)
         db.add(user)
         await db.commit()
         await db.refresh(user)
