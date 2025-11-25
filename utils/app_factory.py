@@ -11,6 +11,7 @@ from core.logger import logger
 from routers.v1.private.permission import permissions_router
 from routers.v1.private.role import roles_router
 from routers.v1.private.user import user_control_router
+from routers.v1.private.address import address_router
 from routers.v1.public.auth import auth_v1_router
 from routers.v1.public.password_reset import password_reset_router
 from routers.v1.public.verification_code import verification_code_router
@@ -35,6 +36,7 @@ def setup_routers(app: FastAPI):
     private_router.include_router(user_control_router, tags=["user"])
     private_router.include_router(roles_router, tags=["roles"])
     private_router.include_router(permissions_router, tags=["permissions"])
+    private_router.include_router(address_router, tags=["address"])
 
     v1_router.include_router(private_router)
     app.include_router(v1_router)

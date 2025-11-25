@@ -8,8 +8,8 @@ from services.rpc_server_client.base_client import BaseRpcClient, T
 from payment.v1 import stripe_pb2_grpc, stripe_pb2
 
 class AccountRpcClient(BaseRpcClient[stripe_pb2_grpc.PaymentServiceStub]):
-    def __init__(self):
-        super().__init__(server_url=settings.RPC_PAYMENT_URL)
+    def __init__(self, timeout: int = 10):
+        super().__init__(server_url=settings.RPC_PAYMENT_URL, timeout=timeout)
 
     async def __aenter__(self):
         await self.connect()

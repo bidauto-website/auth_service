@@ -1,3 +1,4 @@
+import asyncio
 import grpc
 from fastapi import APIRouter, Depends, Query, Path
 from rfc9457 import NotFoundProblem, BadRequestProblem
@@ -6,12 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import Permissions
 from core.logger import logger
 from database.crud.user import UserService
+from database.crud.address import AddressService
 from database.db.session import get_async_db
 
 from fastapi_pagination.ext.sqlalchemy import paginate
 
 from database.models import User
 from database.schemas.user import UserRead
+from database.schemas.address import AddressRead, AddressCreate
 from dependencies.security import JWTUser, require_all_permissions
 from schemas.request_schemas.users import UserSearchIn
 from schemas.response_schemas.users import FullUserOut, DetailedUser, UserAccount, Plan
@@ -29,8 +32,15 @@ async def _build_detailed_user(user_service: UserService, user_uuid: str, user: 
         user=user,
     )
 
+    address_service = AddressService(user_service.session)
+    address = await address_service.get_by_user_id(user.id)
+    if not address:
+        address = await address_service.create(AddressCreate(user_id=user.id))
+    address_out: AddressRead | None = AddressRead.model_validate(address) if address else None
+
+    user_account: UserAccount | None = None
     try:
-        async with AccountRpcClient() as rpc_client:
+        async with AccountRpcClient(timeout=2) as rpc_client:
             account = await rpc_client.get_account_info(user_uuid=user_uuid)
             plan = Plan(
                 name=account.plan.name,
@@ -40,6 +50,9 @@ async def _build_detailed_user(user_service: UserService, user_uuid: str, user: 
                 max_bid_one_time=account.plan.max_bid_one_time
             )
             user_account = UserAccount(balance=account.balance, plan=plan)
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout while fetching account info for user {user_uuid}; omitting plan data")
+        user_account = UserAccount()
     except grpc.aio.AioRpcError as e:
         logger.exception(f"Error on get account by uuid: {e.details()}")
         raise BadRequestProblem(detail=f"Error on get account by uuid: {e.details()}")
@@ -50,7 +63,8 @@ async def _build_detailed_user(user_service: UserService, user_uuid: str, user: 
         **base_user.model_dump(),
         roles=roles_permissions.get("roles", []),
         permissions=roles_permissions.get("permissions", []),
-        account=user_account
+        account=user_account,
+        address=address_out,
     )
 
 @user_control_router.get("", response_model=UserPage, description='All users view',
@@ -82,11 +96,6 @@ async def user_router(user_uuid: str = Path(...), db: AsyncSession = Depends(get
     if not user:
         raise NotFoundProblem(detail="User not found")
     return await _build_detailed_user(user_service=user_service, user_uuid=user_uuid, user=user)
-
-
-
-
-
 
 
 

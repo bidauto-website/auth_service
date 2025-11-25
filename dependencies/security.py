@@ -227,6 +227,22 @@ class RequirePermission:
         self.require_all = require_all
         self.require_token = require_token
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RequirePermission):
+            return False
+        return (
+            tuple(self.permissions),
+            self.require_all,
+            self.require_token,
+        ) == (
+            tuple(other.permissions),
+            other.require_all,
+            other.require_token,
+        )
+
+    def __hash__(self) -> int:
+        return hash((tuple(self.permissions), self.require_all, self.require_token))
+
     def __call__(self, user: JWTUser = Depends(get_current_user)) -> JWTUser:
         if not self.require_token:
             return user
@@ -235,23 +251,35 @@ class RequirePermission:
             permission_strings = [perm.value if hasattr(perm, 'value') else str(perm)
                                   for perm in self.permissions]
 
+            user_permissions = getattr(user, "permissions", []) or []
+            has_all_permissions = getattr(user, "has_all_permissions", None)
+            has_any_permission = getattr(user, "has_any_permission", None)
+
             if self.require_all:
-                if not user.has_all_permissions(*permission_strings):
+                has_required_permissions = (
+                    callable(has_all_permissions)
+                    and has_all_permissions(*permission_strings)
+                ) or all(perm in user_permissions for perm in permission_strings)
+                if not has_required_permissions:
                     logger.warning(
                         'User doesnt have all required permissions',
                         extra={
                             'required_permissions': permission_strings,
-                            'user_permissions': user.permissions
+                            'user_permissions': user_permissions
                         }
                     )
                     raise NotEnoughPermissionsProblem(detail="Missing permissions")
             else:
-                if not user.has_any_permission(*permission_strings):
+                has_required_permissions = (
+                    callable(has_any_permission)
+                    and has_any_permission(*permission_strings)
+                ) or any(perm in user_permissions for perm in permission_strings)
+                if not has_required_permissions:
                     logger.warning(
                         'User doesnt have any required permissions',
                         extra={
                             'required_permissions': permission_strings,
-                            'user_permissions': user.permissions
+                            'user_permissions': user_permissions
                         }
                     )
                     raise NotEnoughPermissionsProblem(detail="Missing permissions")

@@ -72,7 +72,8 @@ def setup_logging(
         include_extra=include_extra
     )
     loguru_logger.remove()
-    loguru_logger.add(console_logger.sink, format="{message}", level=level, backtrace=True, diagnose=True, enqueue=True)
+    # enqueue=False avoids multiprocessing queue creation which can fail in restricted environments
+    loguru_logger.add(console_logger.sink, format="{message}", level=level, backtrace=True, diagnose=True, enqueue=False)
     return loguru_logger.bind(service=service_name, environment=environment)
 
 

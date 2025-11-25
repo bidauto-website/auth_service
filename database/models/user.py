@@ -8,6 +8,7 @@ from database.models import Base
 
 if TYPE_CHECKING:
     from database.models.role import Role
+    from database.models.address import Address
 
 
 class User(Base):
@@ -41,4 +42,9 @@ class User(Base):
         lazy="selectin"
     )
 
-
+    address: Mapped["Address"] = relationship(
+        "Address",
+        back_populates="user",
+        uselist=False,
+        lazy="joined",
+    )
