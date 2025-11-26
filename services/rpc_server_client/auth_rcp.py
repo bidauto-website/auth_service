@@ -33,6 +33,8 @@ class AuthRcp(auth_pb2_grpc.AuthServiceServicer):
                     context.set_details("User not found")
                     return auth_pb2.GetUserResponse()
 
+                user_address = getattr(user, "address", None)
+
                 return auth_pb2.GetUserResponse(
                     first_name=user.first_name or "",
                     last_name=user.last_name or "",
@@ -43,6 +45,13 @@ class AuthRcp(auth_pb2_grpc.AuthServiceServicer):
                     is_active=bool(user.is_active),
                     phone_verified=bool(user.phone_verified),
                     email_verified=bool(user.email_verified),
+                    address=auth_pb2.Address(
+                        country=user_address.country or "",
+                        state=user_address.state or "",
+                        zip_code=int(user_address.zip_code) if user_address.zip_code else 0,
+                        city=user_address.city or "",
+                        address=user_address.address or "",
+                    ) if user_address else None,
                 )
         except Exception as exc:
             logger.error(f"Error while processing GetUser: {exc}")
